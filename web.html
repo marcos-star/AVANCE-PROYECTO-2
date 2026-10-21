@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard de concreto</title>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<style>
+body{font-family:system-ui,sans-serif;background:#f4f6f8;color:#1f2933;margin:0;padding:24px}
+h1{margin:0 0 16px}
+.card{background:#fff;border:1px solid #e3e8ee;border-radius:10px;padding:14px;margin-bottom:16px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+.kpi{background:#fff;border:1px solid #e3e8ee;border-radius:10px;padding:12px}
+.kpi span{font-size:12px;color:#6b7785}.kpi h3{margin:4px 0 0;font-size:22px;color:#2f6fed}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(460px,1fr));gap:16px}
+.grid .card{margin:0;padding:6px;height:460px;box-sizing:border-box;overflow:hidden;min-width:0}
+.grid .card>div{width:100%;height:100%}
+.form{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.form label{display:flex;flex-direction:column;font-size:13px;gap:4px}
+.form input{padding:6px;border:1px solid #cbd2d9;border-radius:6px}
+#pred{font-size:28px;font-weight:700;color:#2f6fed;margin-top:12px}
+table{border-collapse:collapse}th,td{text-align:left;padding:6px 14px;border-bottom:1px solid #e3e8ee}
+.rango{position:relative;height:28px;margin:8px 8px 0}
+.rango .pista{position:absolute;top:12px;left:0;right:0;height:4px;background:#d5dbe3;border-radius:2px}
+.rango .activa{position:absolute;top:12px;height:4px;background:#2f6fed;border-radius:2px}
+.rango input{position:absolute;left:0;width:100%;top:4px;margin:0;background:none;pointer-events:none;-webkit-appearance:none;appearance:none}
+.rango input::-webkit-slider-thumb{pointer-events:auto;-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:#2f6fed;border:2px solid #fff;box-shadow:0 0 0 1px #2f6fed;cursor:pointer}
+.rango input::-moz-range-thumb{pointer-events:auto;width:14px;height:14px;border-radius:50%;background:#2f6fed;border:2px solid #fff;cursor:pointer}
+.rango input::-webkit-slider-runnable-track{background:none}
+.rango input::-moz-range-track{background:none}
+#valores{font-size:14px;margin-top:6px}
+#aviso{color:#b42318;display:none;margin-top:6px}
+</style></head><body>
+<h1>Dashboard de resistencia del concreto</h1>
+
+<div class="card">
+  <label>Filtrar por resistencia a 28 días (MPa)</label>
+  <div class="rango">
+    <div class="pista"></div><div class="activa" id="activa"></div>
+    <input type="range" id="lo"><input type="range" id="hi">
+  </div>
+  <div id="valores"></div>
+  <div id="aviso">Hay menos de 3 mezclas en este rango. Amplía el filtro.</div>
+</div>
+
+<div class="kpis" id="kpis"></div>
+<div class="grid">
+  <div class="card"><div id="g-hist"></div></div>
+  <div class="card"><div id="g-cem"></div></div>
+  <div class="card"><div id="g-sf"></div></div>
+  <div class="card"><div id="g-corr"></div></div>
+  <div class="card"><div id="g-3d"></div></div>
+  <div class="card"><div id="g-real"></div></div>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <h3>Comparación de modelos (validación cruzada, 5 folds)</h3>
+  <table id="tabla"></table>
+</div>
+
+<div class="card">
+  <h3>Predicción de resistencia (regresión lineal)</h3>
+  <div class="form" id="form"></div>
+  <div id="pred"></div>
+</div>
+
+<script>
+const D = {"fc": "Compressive Strength (28-day)(Mpa)", "filas": [{"Cement": 273.0, "Slag": 82.0, "Fly ash": 105.0, "Water": 210.0, "SP": 9.0, "Coarse Aggr.": 904.0, "Fine Aggr.": 680.0, "SLUMP(cm)": 23.0, "FLOW(cm)": 62.0, "Compressive Strength (28-day)(Mpa)": 34.99, "pred": 34.57}, {"Cement": 163.0, "Slag": 149.0, "Fly ash": 191.0, "Water": 180.0, "SP": 12.0, "Coarse Aggr.": 843.0, "Fine Aggr.": 746.0, "SLUMP(cm)": 0.0, "FLOW(cm)": 20.0, "Compressive Strength (28-day)(Mpa)": 41.14, "pred": 37.77}, {"Cement": 162.0, "Slag": 148.0, "Fly ash": 191.0, "Water": 179.0, "SP": 16.0, "Coarse Aggr.": 840.0, "Fine Aggr.": 743.0, "SLUMP(cm)": 1.0, "FLOW(cm)": 20.0, "Compressive Strength (28-day)(Mpa)": 41.81, "pred": 38.68}, {"Cement": 162.0, "Slag": 148.0, "Fly ash": 190.0, "Water": 179.0, "SP": 19.0, "Coarse Aggr.": 838.0, "Fine Aggr.": 741.0, "SLUMP(cm)": 3.0, "FLOW(cm)": 21.5, "Compressive Strength (28-day)(Mpa)": 42.08, "pred": 39.5}, {"Cement": 154.0, "Slag": 112.0, "Fly ash": 144.0, "Water": 220.0, "SP": 10.0, "Coarse Aggr.": 923.0, "Fine Aggr.": 658.0, "SLUMP(cm)": 20.0, "FLOW(cm)": 64.0, "Compressive Strength (28-day)(Mpa)": 26.82, "pred": 26.36}, {"Cement": 147.0, "Slag": 89.0, "Fly ash": 115.0, "Water": 202.0, "SP": 9.0, "Coarse Aggr.": 860.0, "Fine Aggr.": 829.0, "SLUMP(cm)": 23.0, "FLOW(cm)": 55.0, "Compressive Strength (28-day)(Mpa)": 25.21, "pred": 26.17}, {"Cement": 152.0, "Slag": 139.0, "Fly ash": 178.0, "Water": 168.0, "SP": 18.0, "Coarse Aggr.": 944.0, "Fine Aggr.": 695.0, "SLUMP(cm)": 0.0, "FLOW(cm)": 20.0, "Compressive Strength (28-day)(Mpa)": 38.86, "pred": 36.93}, {"Cement": 145.0, "Slag": 0.0, "Fly ash": 227.0, "Water": 240.0, "SP": 6.0, "Coarse Aggr.": 750.0, "Fine Aggr.": 853.0, "SLUMP(cm)": 14.5, "FLOW(cm)": 58.5, "Compressive Strength (28-day)(Mpa)": 36.59, "pred": 29.29}, {"Cement": 152.0, "Slag": 0.0, "Fly ash": 237.0, "Water": 204.0, "SP": 6.0, "Coarse Aggr.": 785.0, "Fine Aggr.": 892.0, "SLUMP(cm)": 15.5, "FLOW(cm)": 51.0, "Compressive Strength (28-day)(Mpa)": 32.71, "pred": 35.49}, {"Cement": 304.0, "Slag": 0.0, "Fly ash": 140.0, "Water": 214.0, "SP": 6.0, "Coarse Aggr.": 895.0, "Fine Aggr.": 722.0, "SLUMP(cm)": 19.0, "FLOW(cm)": 51.0, "Compressive Strength (28-day)(Mpa)": 38.46, "pred": 38.55}, {"Cement": 145.0, "Slag": 106.0, "Fly ash": 136.0, "Water": 208.0, "SP": 10.0, "Coarse Aggr.": 751.0, "Fine Aggr.": 883.0, "SLUMP(cm)": 24.5, "FLOW(cm)": 61.0, "Compressive Strength (28-day)(Mpa)": 26.02, "pred": 29.51}, {"Cement": 148.0, "Slag": 109.0, "Fly ash": 139.0, "Water": 193.0, "SP": 7.0, "Coarse Aggr.": 768.0, "Fine Aggr.": 902.0, "SLUMP(cm)": 23.75, "FLOW(cm)": 58.0, "Compressive Strength (28-day)(Mpa)": 28.03, "pred": 30.65}, {"Cement": 142.0, "Slag": 130.0, "Fly ash": 167.0, "Water": 215.0, "SP": 6.0, "Coarse Aggr.": 735.0, "Fine Aggr.": 836.0, "SLUMP(cm)": 25.5, "FLOW(cm)": 67.0, "Compressive Strength (28-day)(Mpa)": 31.37, "pred": 30.73}, {"Cement": 354.0, "Slag": 0.0, "Fly ash": 0.0, "Water": 234.0, "SP": 6.0, "Coarse Aggr.": 959.0, "Fine Aggr.": 691.0, "SLUMP(cm)": 17.0, "FLOW(cm)": 54.0, "Compressive Strength (28-day)(Mpa)": 33.91, "pred": 26.75}, {"Cement": 374.0, "Slag": 0.0, "Fly ash": 0.0, "Water": 190.0, "SP": 7.0, "Coarse Aggr.": 1013.0, "Fine Aggr.": 730.0, "SLUMP(cm)": 14.5, "FLOW(cm)": 42.5, "Compressive Strength (28-day)(Mpa)": 32.44, "pred": 35.89}, {"Cement": 159.0, "Slag": 116.0, "Fly ash": 149.0, "Water": 175.0, "SP": 15.0, "Coarse Aggr.": 953.0, "Fine Aggr.": 720.0, "SLUMP(cm)": 23.5, "FLOW(cm)": 54.5, "Compressive Strength (28-day)(Mpa)": 34.05, "pred": 33.62}, {"Cement": 153.0, "Slag": 0.0, "Fly ash": 239.0, "Water": 200.0, "SP": 6.0, "Coarse Aggr.": 1002.0, "Fine Aggr.": 684.0, "SLUMP(cm)": 12.0, "FLOW(cm)": 35.0, "Compressive Strength (28-day)(Mpa)": 28.29, "pred": 33.59}, {"Cement": 295.0, "Slag": 106.0, "Fly ash": 136.0, "Water": 206.0, "SP": 11.0, "Coarse Aggr.": 750.0, "Fine Aggr.": 766.0, "SLUMP(cm)": 25.0, "FLOW(cm)": 68.5, "Compressive Strength (28-day)(Mpa)": 41.01, "pred": 42.96}, {"Cement": 310.0, "Slag": 0.0, "Fly ash": 143.0, "Water": 168.0, "SP": 10.0, "Coarse Aggr.": 914.0, "Fine Aggr.": 804.0, "SLUMP(cm)": 20.5, "FLOW(cm)": 48.2, "Compressive Strength (28-day)(Mpa)": 49.3, "pred": 45.31}, {"Cement": 296.0, "Slag": 97.0, "Fly ash": 0.0, "Water": 219.0, "SP": 9.0, "Coarse Aggr.": 932.0, "Fine Aggr.": 685.0, "SLUMP(cm)": 15.0, "FLOW(cm)": 48.5, "Compressive Strength (28-day)(Mpa)": 29.23, "pred": 26.09}, {"Cement": 305.0, "Slag": 100.0, "Fly ash": 0.0, "Water": 196.0, "SP": 10.0, "Coarse Aggr.": 959.0, "Fine Aggr.": 705.0, "SLUMP(cm)": 20.0, "FLOW(cm)": 49.0, "Compressive Strength (28-day)(Mpa)": 29.77, "pred": 31.16}, {"Cement": 310.0, "Slag": 0.0, "Fly ash": 143.0, "Water": 218.0, "SP": 10.0, "Coarse Aggr.": 787.0, "Fine Aggr.": 804.0, "SLUMP(cm)": 13.0, "FLOW(cm)": 46.0, "Compressive Strength (28-day)(Mpa)": 36.19, "pred": 41.59}, {"Cement": 148.0, "Slag": 180.0, "Fly ash": 0.0, "Water": 183.0, "SP": 11.0, "Coarse Aggr.": 972.0, "Fine Aggr.": 757.0, "SLUMP(cm)": 0.0, "FLOW(cm)": 20.0, "Compressive Strength (28-day)(Mpa)": 18.52, "pred": 18.89}, {"Cement": 146.0, "Slag": 178.0, "Fly ash": 0.0, "Water": 192.0, "SP": 11.0, "Coarse Aggr.": 961.0, "Fine Aggr.": 749.0, "SLUMP(cm)": 18.0, "FLOW(cm)": 46.0, "Compressive Strength (28-day)(Mpa)": 17.19, "pred": 17.63}, {"Cement": 142.0, "Slag": 130.0, "Fly ash": 167.0, "Water": 174.0, "SP": 11.0, "Coarse Aggr.": 883.0, "Fine Aggr.": 785.0, "SLUMP(cm)": 0.0, "FLOW(cm)": 20.0, "Compressive Strength (28-day)(Mpa)": 36.72, "pred": 34.05}, {"Cement": 140.0, "Slag": 128.0, "Fly ash": 164.0, "Water": 183.0, "SP": 12.0, "Coarse Aggr.": 871.0, "Fine Aggr.": 775.0, "SLUMP(cm)": 23.75, "FLOW(cm)": 53.0, "Compressive Strength (28-day)(Mpa)": 33.38, "pred": 32.74}, {"Cement": 308.0, "Slag": 111.0, "Fly ash": 142.0, "Water": 217.0, "SP": 10.0, "Coarse Aggr.": 783.0, "Fine Aggr.": 686.0, "SLUMP(cm)": 25.0, "FLOW(cm)": 70.0, "Compressive Strength (28-day)(Mpa)": 42.08, "pred": 42.69}, {"Cement": 295.0, "Slag": 106.0, "Fly ash": 136.0, "Water": 208.0, "SP": 6.0, "Coarse Aggr.": 871.0, "Fine Aggr.": 650.0, "SLUMP(cm)": 26.5, "FLOW(cm)": 70.0, "Compressive Strength (28-day)(Mpa)": 39.4, "pred": 39.63}, {"Cement": 298.0, "Slag": 107.0, "Fly ash": 137.0, "Water": 201.0, "SP": 6.0, "Coarse Aggr.": 878.0, "Fine Aggr.": 655.0, "SLUMP(cm)": 16.0, "FLOW(cm)": 26.0, "Compressive Strength (28-day)(Mpa)": 41.27, "pred": 41.04}, {"Cement": 314.0, "Slag": 0.0, "Fly ash": 161.0, "Water": 207.0, "SP": 6.0, "Coarse Aggr.": 851.0, "Fine Aggr.": 757.0, "SLUMP(cm)": 21.5, "FLOW(cm)": 64.0, "Compressive Strength (28-day)(Mpa)": 41.14, "pred": 43.15}, {"Cement": 321.0, "Slag": 0.0, "Fly ash": 164.0, "Water": 190.0, "SP": 5.0, "Coarse Aggr.": 870.0, "Fine Aggr.": 774.0, "SLUMP(cm)": 24.0, "FLOW(cm)": 60.0, "Compressive Strength (28-day)(Mpa)": 45.82, "pred": 45.01}, {"Cement": 349.0, "Slag": 0.0, "Fly ash": 178.0, "Water": 230.0, "SP": 6.0, "Coarse Aggr.": 785.0, "Fine Aggr.": 721.0, "SLUMP(cm)": 20.0, "FLOW(cm)": 68.5, "Compressive Strength (28-day)(Mpa)": 43.95, "pred": 45.3}, {"Cement": 366.0, "Slag": 0.0, "Fly ash": 187.0, "Water": 191.0, "SP": 7.0, "Coarse Aggr.": 824.0, "Fine Aggr.": 757.0, "SLUMP(cm)": 24.75, "FLOW(cm)": 62.7, "Compressive Strength (28-day)(Mpa)": 52.65, "pred": 51.51}, {"Cement": 274.0, "Slag": 89.0, "Fly ash": 115.0, "Water": 202.0, "SP": 9.0, "Coarse Aggr.": 759.0, "Fine Aggr.": 827.0, "SLUMP(cm)": 26.5, "FLOW(cm)": 68.0, "Compressive Strength (28-day)(Mpa)": 35.52, "pred": 39.31}, {"Cement": 137.0, "Slag": 167.0, "Fly ash": 214.0, "Water": 226.0, "SP": 6.0, "Coarse Aggr.": 708.0, "Fine Aggr.": 757.0, "SLUMP(cm)": 27.5, "FLOW(cm)": 70.0, "Compressive Strength (28-day)(Mpa)": 34.45, "pred": 32.84}, {"Cement": 275.0, "Slag": 99.0, "Fly ash": 127.0, "Water": 184.0, "SP": 13.0, "Coarse Aggr.": 810.0, "Fine Aggr.": 790.0, "SLUMP(cm)": 25.75, "FLOW(cm)": 64.5, "Compressive Strength (28-day)(Mpa)": 43.54, "pred": 42.48}, {"Cement": 252.0, "Slag": 76.0, "Fly ash": 97.0, "Water": 194.0, "SP": 8.0, "Coarse Aggr.": 835.0, "Fine Aggr.": 821.0, "SLUMP(cm)": 23.0, "FLOW(cm)": 54.0, "Compressive Strength (28-day)(Mpa)": 33.11, "pred": 35.07}, {"Cement": 165.0, "Slag": 150.0, "Fly ash": 0.0, "Water": 182.0, "SP": 12.0, "Coarse Aggr.": 1023.0, "Fine Aggr.": 729.0, "SLUMP(cm)": 14.5, "FLOW(cm)": 20.0, "Compressive Strength (28-day)(Mpa)": 18.26, "pred": 19.62}, {"Cement": 158.0, "Slag": 0.0, "Fly ash": 246.0, "Water": 174.0, "SP": 7.0, "Coarse Aggr.": 1035.0, "Fine Aggr.": 706.0, "SLUMP(cm)": 19.0, "FLOW(cm)": 43.0, "Compressive Strength (28-day)(Mpa)": 34.99, "pred": 36.67}, {"Cement": 156.0, "Slag": 0.0, "Fly ash": 243.0, "Water": 180.0, "SP": 11.0, "Coarse Aggr.": 1022.0, "Fine Aggr.": 698.0, "SLUMP(cm)": 21.0, "FLOW(cm)": 57.0, "Compressive Strength (28-day)(Mpa)": 33.78, "pred": 37.37}, {"Cement": 145.0, "Slag": 177.0, "Fly ash": 227.0, "Water": 209.0, "SP": 11.0, "Coarse Aggr.": 752.0, "Fine Aggr.": 715.0, "SLUMP(cm)": 2.5, "FLOW(cm)": 20.0, "Compressive Strength (28-day)(Mpa)": 35.66, "pred": 38.07}, {"Cement": 154.0, "Slag": 141.0, "Fly ash": 181.0, "Water": 234.0, "SP": 11.0, "Coarse Aggr.": 797.0, "Fine Aggr.": 683.0, "SLUMP(cm)": 23.0, "FLOW(cm)": 65.0, "Compressive Strength (28-day)(Mpa)": 33.51, "pred": 29.98}, {"Cement": 160.0, "Slag": 146.0, "Fly ash": 188.0, "Water": 203.0, "SP": 11.0, "Coarse Aggr.": 829.0, "Fine Aggr.": 710.0, "SLUMP(cm)": 13.0, "FLOW(cm)": 38.0, "Compressive Strength (28-day)(Mpa)": 33.51, "pred": 35.12}, {"Cement": 291.0, "Slag": 105.0, "Fly ash": 0.0, "Water": 205.0, "SP": 6.0, "Coarse Aggr.": 859.0, "Fine Aggr.": 797.0, "SLUMP(cm)": 24.0, "FLOW(cm)": 59.0, "Compressive Strength (28-day)(Mpa)": 27.62, "pred": 28.62}, {"Cement": 298.0, "Slag": 107.0, "Fly ash": 0.0, "Water": 186.0, "SP": 6.0, "Coarse Aggr.": 879.0, "Fine Aggr.": 815.0, "SLUMP(cm)": 3.0, "FLOW(cm)": 20.0, "Compressive Strength (28-day)(Mpa)": 30.97, "pred": 31.36}, {"Cement": 318.0, "Slag": 126.0, "Fly ash": 0.0, "Water": 210.0, "SP": 6.0, "Coarse Aggr.": 861.0, "Fine Aggr.": 737.0, "SLUMP(cm)": 17.5, "FLOW(cm)": 48.0, "Compressive Strength (28-day)(Mpa)": 31.77, "pred": 30.55}, {"Cement": 280.0, "Slag": 92.0, "Fly ash": 118.0, "Water": 207.0, "SP": 9.0, "Coarse Aggr.": 883.0, "Fine Aggr.": 679.0, "SLUMP(cm)": 25.5, "FLOW(cm)": 64.0, "Compressive Strength (28-day)(Mpa)": 37.39, "pred": 36.95}, {"Cement": 287.0, "Slag": 94.0, "Fly ash": 121.0, "Water": 188.0, "SP": 9.0, "Coarse Aggr.": 904.0, "Fine Aggr.": 696.0, "SLUMP(cm)": 25.0, "FLOW(cm)": 61.0, "Compressive Strength (28-day)(Mpa)": 43.01, "pred": 40.12}, {"Cement": 332.0, "Slag": 0.0, "Fly ash": 170.0, "Water": 160.0, "SP": 6.0, "Coarse Aggr.": 900.0, "Fine Aggr.": 806.0, "SLUMP(cm)": 0.0, "FLOW(cm)": 20.0, "Compressive Strength (28-day)(Mpa)": 58.53, "pred": 49.48}, {"Cement": 326.0, "Slag": 0.0, "Fly ash": 167.0, "Water": 174.0, "SP": 6.0, "Coarse Aggr.": 884.0, "Fine Aggr.": 792.0, "SLUMP(cm)": 21.5, "FLOW(cm)": 42.0, "Compressive Strength (28-day)(Mpa)": 52.65, "pred": 48.21}, {"Cement": 320.0, "Slag": 0.0, "Fly ash": 163.0, "Water": 188.0, "SP": 9.0, "Coarse Aggr.": 866.0, "Fine Aggr.": 776.0, "SLUMP(cm)": 23.5, "FLOW(cm)": 60.0, "Compressive Strength (28-day)(Mpa)": 45.69, "pred": 45.63}, {"Cement": 342.0, "Slag": 136.0, "Fly ash": 0.0, "Water": 225.0, "SP": 11.0, "Coarse Aggr.": 770.0, "Fine Aggr.": 747.0, "SLUMP(cm)": 21.0, "FLOW(cm)": 61.0, "Compressive Strength (28-day)(Mpa)": 32.04, "pred": 34.37}, {"Cement": 356.0, "Slag": 142.0, "Fly ash": 0.0, "Water": 193.0, "SP": 11.0, "Coarse Aggr.": 801.0, "Fine Aggr.": 778.0, "SLUMP(cm)": 8.0, "FLOW(cm)": 30.0, "Compressive Strength (28-day)(Mpa)": 36.46, "pred": 39.39}, {"Cement": 309.0, "Slag": 0.0, "Fly ash": 142.0, "Water": 218.0, "SP": 10.0, "Coarse Aggr.": 912.0, "Fine Aggr.": 680.0, "SLUMP(cm)": 24.0, "FLOW(cm)": 62.0, "Compressive Strength (28-day)(Mpa)": 38.59, "pred": 39.23}, {"Cement": 322.0, "Slag": 0.0, "Fly ash": 149.0, "Water": 186.0, "SP": 8.0, "Coarse Aggr.": 951.0, "Fine Aggr.": 709.0, "SLUMP(cm)": 20.5, "FLOW(cm)": 61.5, "Compressive Strength (28-day)(Mpa)": 45.42, "pred": 43.33}, {"Cement": 159.0, "Slag": 193.0, "Fly ash": 0.0, "Water": 208.0, "SP": 12.0, "Coarse Aggr.": 821.0, "Fine Aggr.": 818.0, "SLUMP(cm)": 23.0, "FLOW(cm)": 50.0, "Compressive Strength (28-day)(Mpa)": 19.19, "pred": 19.39}, {"Cement": 307.0, "Slag": 110.0, "Fly ash": 0.0, "Water": 189.0, "SP": 10.0, "Coarse Aggr.": 904.0, "Fine Aggr.": 765.0, "SLUMP(cm)": 22.0, "FLOW(cm)": 40.0, "Compressive Strength (28-day)(Mpa)": 31.5, "pred": 32.06}, {"Cement": 313.0, "Slag": 124.0, "Fly ash": 0.0, "Water": 205.0, "SP": 11.0, "Coarse Aggr.": 846.0, "Fine Aggr.": 758.0, "SLUMP(cm)": 22.0, "FLOW(cm)": 49.0, "Compressive Strength (28-day)(Mpa)": 29.63, "pred": 31.97}, {"Cement": 143.0, "Slag": 131.0, "Fly ash": 168.0, "Water": 217.0, "SP": 6.0, "Coarse Aggr.": 891.0, "Fine Aggr.": 672.0, "SLUMP(cm)": 25.0, "FLOW(cm)": 69.0, "Compressive Strength (28-day)(Mpa)": 26.42, "pred": 27.33}, {"Cement": 140.0, "Slag": 128.0, "Fly ash": 164.0, "Water": 237.0, "SP": 6.0, "Coarse Aggr.": 869.0, "Fine Aggr.": 656.0, "SLUMP(cm)": 24.0, "FLOW(cm)": 65.0, "Compressive Strength (28-day)(Mpa)": 29.5, "pred": 24.46}, {"Cement": 278.0, "Slag": 0.0, "Fly ash": 117.0, "Water": 205.0, "SP": 9.0, "Coarse Aggr.": 875.0, "Fine Aggr.": 799.0, "SLUMP(cm)": 19.0, "FLOW(cm)": 48.0, "Compressive Strength (28-day)(Mpa)": 32.71, "pred": 36.64}, {"Cement": 288.0, "Slag": 0.0, "Fly ash": 121.0, "Water": 177.0, "SP": 7.0, "Coarse Aggr.": 908.0, "Fine Aggr.": 829.0, "SLUMP(cm)": 22.5, "FLOW(cm)": 48.5, "Compressive Strength (28-day)(Mpa)": 39.93, "pred": 39.59}, {"Cement": 299.0, "Slag": 107.0, "Fly ash": 0.0, "Water": 210.0, "SP": 10.0, "Coarse Aggr.": 881.0, "Fine Aggr.": 745.0, "SLUMP(cm)": 25.0, "FLOW(cm)": 63.0, "Compressive Strength (28-day)(Mpa)": 28.29, "pred": 29.1}, {"Cement": 291.0, "Slag": 104.0, "Fly ash": 0.0, "Water": 231.0, "SP": 9.0, "Coarse Aggr.": 857.0, "Fine Aggr.": 725.0, "SLUMP(cm)": 23.0, "FLOW(cm)": 69.0, "Compressive Strength (28-day)(Mpa)": 30.43, "pred": 25.87}, {"Cement": 265.0, "Slag": 86.0, "Fly ash": 111.0, "Water": 195.0, "SP": 6.0, "Coarse Aggr.": 833.0, "Fine Aggr.": 790.0, "SLUMP(cm)": 27.0, "FLOW(cm)": 60.0, "Compressive Strength (28-day)(Mpa)": 37.39, "pred": 37.04}, {"Cement": 159.0, "Slag": 0.0, "Fly ash": 248.0, "Water": 175.0, "SP": 12.0, "Coarse Aggr.": 1041.0, "Fine Aggr.": 683.0, "SLUMP(cm)": 21.0, "FLOW(cm)": 51.0, "Compressive Strength (28-day)(Mpa)": 35.39, "pred": 38.58}, {"Cement": 160.0, "Slag": 0.0, "Fly ash": 250.0, "Water": 168.0, "SP": 12.0, "Coarse Aggr.": 1049.0, "Fine Aggr.": 688.0, "SLUMP(cm)": 18.0, "FLOW(cm)": 48.0, "Compressive Strength (28-day)(Mpa)": 37.66, "pred": 38.71}, {"Cement": 166.0, "Slag": 0.0, "Fly ash": 260.0, "Water": 183.0, "SP": 13.0, "Coarse Aggr.": 859.0, "Fine Aggr.": 827.0, "SLUMP(cm)": 21.0, "FLOW(cm)": 54.0, "Compressive Strength (28-day)(Mpa)": 40.34, "pred": 42.04}, {"Cement": 320.0, "Slag": 127.0, "Fly ash": 164.0, "Water": 211.0, "SP": 6.0, "Coarse Aggr.": 721.0, "Fine Aggr.": 723.0, "SLUMP(cm)": 2.0, "FLOW(cm)": 20.0, "Compressive Strength (28-day)(Mpa)": 46.36, "pred": 46.56}, {"Cement": 336.0, "Slag": 134.0, "Fly ash": 0.0, "Water": 222.0, "SP": 6.0, "Coarse Aggr.": 756.0, "Fine Aggr.": 787.0, "SLUMP(cm)": 26.0, "FLOW(cm)": 64.0, "Compressive Strength (28-day)(Mpa)": 31.9, "pred": 32.27}, {"Cement": 276.0, "Slag": 90.0, "Fly ash": 116.0, "Water": 180.0, "SP": 9.0, "Coarse Aggr.": 870.0, "Fine Aggr.": 768.0, "SLUMP(cm)": 0.0, "FLOW(cm)": 20.0, "Compressive Strength (28-day)(Mpa)": 44.08, "pred": 39.98}, {"Cement": 313.0, "Slag": 112.0, "Fly ash": 0.0, "Water": 220.0, "SP": 10.0, "Coarse Aggr.": 794.0, "Fine Aggr.": 789.0, "SLUMP(cm)": 23.0, "FLOW(cm)": 58.0, "Compressive Strength (28-day)(Mpa)": 28.16, "pred": 31.34}, {"Cement": 322.0, "Slag": 116.0, "Fly ash": 0.0, "Water": 196.0, "SP": 10.0, "Coarse Aggr.": 818.0, "Fine Aggr.": 813.0, "SLUMP(cm)": 25.5, "FLOW(cm)": 67.0, "Compressive Strength (28-day)(Mpa)": 29.77, "pred": 34.4}, {"Cement": 294.0, "Slag": 106.0, "Fly ash": 136.0, "Water": 207.0, "SP": 6.0, "Coarse Aggr.": 747.0, "Fine Aggr.": 778.0, "SLUMP(cm)": 24.0, "FLOW(cm)": 47.0, "Compressive Strength (28-day)(Mpa)": 41.27, "pred": 41.72}, {"Cement": 146.0, "Slag": 106.0, "Fly ash": 137.0, "Water": 209.0, "SP": 6.0, "Coarse Aggr.": 875.0, "Fine Aggr.": 765.0, "SLUMP(cm)": 24.0, "FLOW(cm)": 67.0, "Compressive Strength (28-day)(Mpa)": 27.89, "pred": 25.86}, {"Cement": 149.0, "Slag": 109.0, "Fly ash": 139.0, "Water": 193.0, "SP": 6.0, "Coarse Aggr.": 892.0, "Fine Aggr.": 780.0, "SLUMP(cm)": 23.5, "FLOW(cm)": 58.5, "Compressive Strength (28-day)(Mpa)": 28.7, "pred": 28.13}, {"Cement": 159.0, "Slag": 0.0, "Fly ash": 187.0, "Water": 176.0, "SP": 11.0, "Coarse Aggr.": 990.0, "Fine Aggr.": 789.0, "SLUMP(cm)": 12.0, "FLOW(cm)": 39.0, "Compressive Strength (28-day)(Mpa)": 32.57, "pred": 33.4}, {"Cement": 261.0, "Slag": 78.0, "Fly ash": 100.0, "Water": 201.0, "SP": 9.0, "Coarse Aggr.": 864.0, "Fine Aggr.": 761.0, "SLUMP(cm)": 23.0, "FLOW(cm)": 63.5, "Compressive Strength (28-day)(Mpa)": 34.18, "pred": 34.74}, {"Cement": 140.0, "Slag": 1.4, "Fly ash": 198.1, "Water": 174.9, "SP": 4.4, "Coarse Aggr.": 1049.9, "Fine Aggr.": 780.5, "SLUMP(cm)": 16.25, "FLOW(cm)": 31.0, "Compressive Strength (28-day)(Mpa)": 30.83, "pred": 29.96}, {"Cement": 141.1, "Slag": 0.6, "Fly ash": 209.5, "Water": 188.8, "SP": 4.6, "Coarse Aggr.": 996.1, "Fine Aggr.": 789.2, "SLUMP(cm)": 23.5, "FLOW(cm)": 53.0, "Compressive Strength (28-day)(Mpa)": 30.43, "pred": 29.68}, {"Cement": 140.1, "Slag": 4.2, "Fly ash": 215.9, "Water": 193.9, "SP": 4.7, "Coarse Aggr.": 1049.5, "Fine Aggr.": 710.1, "SLUMP(cm)": 24.5, "FLOW(cm)": 57.0, "Compressive Strength (28-day)(Mpa)": 26.42, "pred": 28.28}, {"Cement": 140.1, "Slag": 11.8, "Fly ash": 226.1, "Water": 207.8, "SP": 4.9, "Coarse Aggr.": 1020.9, "Fine Aggr.": 683.8, "SLUMP(cm)": 21.0, "FLOW(cm)": 64.0, "Compressive Strength (28-day)(Mpa)": 26.28, "pred": 28.37}, {"Cement": 160.2, "Slag": 0.3, "Fly ash": 240.0, "Water": 233.5, "SP": 9.2, "Coarse Aggr.": 781.0, "Fine Aggr.": 841.1, "SLUMP(cm)": 24.0, "FLOW(cm)": 75.0, "Compressive Strength (28-day)(Mpa)": 36.19, "pred": 32.11}, {"Cement": 140.2, "Slag": 30.5, "Fly ash": 239.0, "Water": 169.4, "SP": 5.3, "Coarse Aggr.": 1028.4, "Fine Aggr.": 742.7, "SLUMP(cm)": 21.25, "FLOW(cm)": 46.0, "Compressive Strength (28-day)(Mpa)": 36.32, "pred": 34.66}, {"Cement": 140.2, "Slag": 44.8, "Fly ash": 234.9, "Water": 171.3, "SP": 5.5, "Coarse Aggr.": 1047.6, "Fine Aggr.": 704.0, "SLUMP(cm)": 23.5, "FLOW(cm)": 52.5, "Compressive Strength (28-day)(Mpa)": 33.78, "pred": 34.41}, {"Cement": 140.5, "Slag": 61.1, "Fly ash": 238.9, "Water": 182.5, "SP": 5.7, "Coarse Aggr.": 1017.7, "Fine Aggr.": 681.4, "SLUMP(cm)": 24.5, "FLOW(cm)": 60.0, "Compressive Strength (28-day)(Mpa)": 30.97, "pred": 33.65}, {"Cement": 143.3, "Slag": 91.8, "Fly ash": 239.8, "Water": 200.8, "SP": 6.2, "Coarse Aggr.": 964.8, "Fine Aggr.": 647.1, "SLUMP(cm)": 25.0, "FLOW(cm)": 55.0, "Compressive Strength (28-day)(Mpa)": 27.09, "pred": 32.95}, {"Cement": 194.3, "Slag": 0.3, "Fly ash": 240.0, "Water": 234.2, "SP": 8.9, "Coarse Aggr.": 780.6, "Fine Aggr.": 811.3, "SLUMP(cm)": 26.5, "FLOW(cm)": 78.0, "Compressive Strength (28-day)(Mpa)": 38.46, "pred": 35.3}, {"Cement": 150.4, "Slag": 110.9, "Fly ash": 239.7, "Water": 168.1, "SP": 6.5, "Coarse Aggr.": 1000.2, "Fine Aggr.": 667.2, "SLUMP(cm)": 9.5, "FLOW(cm)": 27.5, "Compressive Strength (28-day)(Mpa)": 37.92, "pred": 37.42}, {"Cement": 150.3, "Slag": 111.4, "Fly ash": 238.8, "Water": 167.3, "SP": 6.5, "Coarse Aggr.": 999.5, "Fine Aggr.": 670.5, "SLUMP(cm)": 14.5, "FLOW(cm)": 36.5, "Compressive Strength (28-day)(Mpa)": 38.19, "pred": 37.91}, {"Cement": 155.4, "Slag": 122.1, "Fly ash": 240.0, "Water": 179.9, "SP": 6.7, "Coarse Aggr.": 966.8, "Fine Aggr.": 652.5, "SLUMP(cm)": 14.5, "FLOW(cm)": 41.5, "Compressive Strength (28-day)(Mpa)": 35.52, "pred": 37.4}, {"Cement": 165.3, "Slag": 143.2, "Fly ash": 238.3, "Water": 200.4, "SP": 7.1, "Coarse Aggr.": 883.2, "Fine Aggr.": 652.6, "SLUMP(cm)": 17.0, "FLOW(cm)": 27.0, "Compressive Strength (28-day)(Mpa)": 32.84, "pred": 37.39}, {"Cement": 303.8, "Slag": 0.2, "Fly ash": 239.8, "Water": 236.4, "SP": 8.3, "Coarse Aggr.": 780.1, "Fine Aggr.": 715.3, "SLUMP(cm)": 25.0, "FLOW(cm)": 78.0, "Compressive Strength (28-day)(Mpa)": 44.48, "pred": 45.55}, {"Cement": 172.0, "Slag": 162.1, "Fly ash": 238.5, "Water": 166.0, "SP": 7.4, "Coarse Aggr.": 953.3, "Fine Aggr.": 641.4, "SLUMP(cm)": 0.0, "FLOW(cm)": 20.0, "Compressive Strength (28-day)(Mpa)": 41.54, "pred": 41.31}, {"Cement": 172.8, "Slag": 158.3, "Fly ash": 239.5, "Water": 166.4, "SP": 7.4, "Coarse Aggr.": 952.6, "Fine Aggr.": 644.1, "SLUMP(cm)": 0.0, "FLOW(cm)": 20.0, "Compressive Strength (28-day)(Mpa)": 41.81, "pred": 41.37}, {"Cement": 184.3, "Slag": 153.4, "Fly ash": 239.2, "Water": 179.0, "SP": 7.5, "Coarse Aggr.": 920.2, "Fine Aggr.": 640.9, "SLUMP(cm)": 0.0, "FLOW(cm)": 20.0, "Compressive Strength (28-day)(Mpa)": 41.01, "pred": 41.14}, {"Cement": 215.6, "Slag": 112.9, "Fly ash": 239.0, "Water": 198.7, "SP": 7.4, "Coarse Aggr.": 884.0, "Fine Aggr.": 649.1, "SLUMP(cm)": 27.5, "FLOW(cm)": 64.0, "Compressive Strength (28-day)(Mpa)": 39.13, "pred": 41.45}, {"Cement": 295.3, "Slag": 0.0, "Fly ash": 239.9, "Water": 236.2, "SP": 8.3, "Coarse Aggr.": 780.3, "Fine Aggr.": 722.9, "SLUMP(cm)": 25.0, "FLOW(cm)": 77.0, "Compressive Strength (28-day)(Mpa)": 44.08, "pred": 44.61}, {"Cement": 248.3, "Slag": 101.0, "Fly ash": 239.1, "Water": 168.9, "SP": 7.7, "Coarse Aggr.": 954.2, "Fine Aggr.": 640.6, "SLUMP(cm)": 0.0, "FLOW(cm)": 20.0, "Compressive Strength (28-day)(Mpa)": 49.97, "pred": 47.3}, {"Cement": 248.0, "Slag": 101.0, "Fly ash": 239.9, "Water": 169.1, "SP": 7.7, "Coarse Aggr.": 949.9, "Fine Aggr.": 644.1, "SLUMP(cm)": 2.0, "FLOW(cm)": 20.0, "Compressive Strength (28-day)(Mpa)": 50.23, "pred": 46.97}, {"Cement": 258.8, "Slag": 88.0, "Fly ash": 239.6, "Water": 175.3, "SP": 7.6, "Coarse Aggr.": 938.9, "Fine Aggr.": 646.0, "SLUMP(cm)": 0.0, "FLOW(cm)": 20.0, "Compressive Strength (28-day)(Mpa)": 50.5, "pred": 47.33}, {"Cement": 297.1, "Slag": 40.9, "Fly ash": 239.9, "Water": 194.0, "SP": 7.5, "Coarse Aggr.": 908.9, "Fine Aggr.": 651.8, "SLUMP(cm)": 27.5, "FLOW(cm)": 67.0, "Compressive Strength (28-day)(Mpa)": 49.17, "pred": 48.46}, {"Cement": 348.7, "Slag": 0.1, "Fly ash": 223.1, "Water": 208.5, "SP": 9.6, "Coarse Aggr.": 786.2, "Fine Aggr.": 758.1, "SLUMP(cm)": 29.0, "FLOW(cm)": 78.0, "Compressive Strength (28-day)(Mpa)": 48.77, "pred": 52.09}], "tabla": [{"modelo": "Regresión lineal", "r2": 0.8529508249660968, "mae": 2.0879414305881996, "rmse": 2.7139822281640393}, {"modelo": "Ridge", "r2": 0.8559084679106309, "mae": 2.076094025199297, "rmse": 2.6827940836312982}, {"modelo": "Random Forest", "r2": 0.7760709751397958, "mae": 2.8257940476190533, "rmse": 3.5452779754173753}], "mejor": "Ridge", "lin": {"intercepto": 139.78149984851882, "coef": {"Cement": 0.06141322362075435, "Slag": -0.02970752350194439, "Fly ash": 0.05052611434288739, "Water": -0.23269504770614446, "SP": 0.10314991422149382, "Coarse Aggr.": -0.05562163391913983, "Fine Aggr.": -0.03908286848965424}, "rango": {"Cement": [137.0, 374.0, 229.89417475728155], "Slag": [0.0, 193.0, 77.97378640776698], "Fly ash": [0.0, 260.0, 149.01456310679612], "Water": [160.0, 240.0, 197.16796116504858], "SP": [4.4, 19.0, 8.539805825242718], "Coarse Aggr.": [708.0, 1049.9, 883.9786407766987], "Fine Aggr.": [640.6, 902.0, 739.6048543689323]}}};
+const FC = D.fc, F = D.filas;
+const FEATS = Object.keys(D.lin.coef);
+const COLS = [...FEATS, "SLUMP(cm)", "FLOW(cm)", FC];
+const NOMBRES = {[FC]: "Resistencia 28d", "SLUMP(cm)": "Slump", "FLOW(cm)": "Flow"};
+const cfg = {responsive: true, displaylogo: false};
+function fallo(id, e) {
+  console.error(id, e);
+  document.getElementById(id).innerHTML = `<p style="padding:16px;color:#b42318">No se pudo dibujar este gráfico: ${e && e.message ? e.message : e}</p>`;
+}
+function react(id, ...args) {
+  try { const p = Plotly.react(id, ...args); if (p && p.catch) p.catch(e => fallo(id, e)); }
+  catch (e) { fallo(id, e); }
+}
+const col = (d, k) => d.map(r => r[k]);
+const mean = a => a.reduce((s, v) => s + v, 0) / a.length;
+const std = a => { const m = mean(a); return Math.sqrt(a.reduce((s, v) => s + (v - m) ** 2, 0) / (a.length - 1)); };
+const median = a => { const s = [...a].sort((x, y) => x - y), n = s.length; return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2; };
+const ols = (x, y) => { const mx = mean(x), my = mean(y); let n = 0, d = 0;
+  x.forEach((v, i) => { n += (v - mx) * (y[i] - my); d += (v - mx) ** 2; }); const m = n / d; return [m, my - m * mx]; };
+const pearson = (x, y) => { const mx = mean(x), my = mean(y); let n = 0, a = 0, b = 0;
+  x.forEach((v, i) => { n += (v - mx) * (y[i] - my); a += (v - mx) ** 2; b += (y[i] - my) ** 2; }); const den = Math.sqrt(a * b); return den > 0 ? n / den : null; };
+function moda(a, bins = 12) {
+  const mn = Math.min(...a), mx = Math.max(...a), w = (mx - mn) / bins || 1, c = Array(bins).fill(0);
+  a.forEach(v => c[Math.min(bins - 1, Math.floor((v - mn) / w))]++);
+  return mn + (c.indexOf(Math.max(...c)) + 0.5) * w;
+}
+
+const ys = col(F, FC);
+const lo = Math.floor(Math.min(...ys)), hi = Math.ceil(Math.max(...ys));
+const $lo = document.getElementById("lo"), $hi = document.getElementById("hi");
+[$lo, $hi].forEach(e => { e.min = lo; e.max = hi; e.step = 0.5; });
+$lo.value = lo; $hi.value = hi;
+
+function actualizar() {
+  let a = +$lo.value, b = +$hi.value;
+  if (a > b) { [a, b] = [b, a]; }
+  const pct = v => (v - lo) / (hi - lo) * 100;
+  const act = document.getElementById("activa");
+  act.style.left = pct(a) + "%"; act.style.width = (pct(b) - pct(a)) + "%";
+  document.getElementById("valores").textContent = `Rango: ${a.toFixed(1)} a ${b.toFixed(1)} MPa`;
+  const d = F.filter(r => r[FC] >= a && r[FC] <= b);
+  const aviso = document.getElementById("aviso");
+  if (d.length < 3) { aviso.style.display = "block"; return; }
+  aviso.style.display = "none";
+
+  const r = col(d, FC), cem = col(d, "Cement"), agua = col(d, "Water");
+  const kpi = (t, v) => `<div class="kpi"><span>${t}</span><h3>${v}</h3></div>`;
+  document.getElementById("kpis").innerHTML = [
+    kpi("Registros", d.length),
+    kpi("Resistencia promedio", mean(r).toFixed(2) + " MPa"),
+    kpi("Resistencia máxima", Math.max(...r).toFixed(2) + " MPa"),
+    kpi("Resistencia mínima", Math.min(...r).toFixed(2) + " MPa"),
+    kpi("Slump promedio", mean(col(d, "SLUMP(cm)")).toFixed(2) + " cm"),
+    kpi("Flow promedio", mean(col(d, "FLOW(cm)")).toFixed(2) + " cm"),
+    kpi("Cemento promedio", mean(cem).toFixed(1) + " kg/m3"),
+    kpi("Agua promedio", mean(agua).toFixed(1) + " kg/m3"),
+    kpi("Relación agua/cemento", mean(d.map(x => x.Water / x.Cement)).toFixed(2)),
+  ].join("");
+
+  // Histograma
+  const me = mean(r), md = median(r), mo = moda(r), sd = std(r);
+  const linea = (x, color, dash) => ({type: "line", xref: "x", yref: "paper", x0: x, x1: x, y0: 0, y1: 1, line: {color, dash}});
+  const ann = (x, t, color, y) => ({x, y, xref: "x", yref: "paper", text: t, showarrow: false, font: {color}, xanchor: "left"});
+  react("g-hist", [{x: r, type: "histogram", nbinsx: 12, marker: {color: "#4c78a8"}}], {
+    title: "Distribución de la resistencia a 28 días",
+    xaxis: {title: "Resistencia (MPa)"}, yaxis: {title: "Cantidad de mezclas"},
+    shapes: [linea(me, "red", "dash"), linea(md, "blue", "dashdot"), linea(mo, "green", "dot")],
+    annotations: [ann(me, `Media: ${me.toFixed(2)}`, "red", 1), ann(md, `Mediana: ${md.toFixed(2)}`, "blue", 0.92),
+      ann(mo, `Moda: ${mo.toFixed(2)}`, "green", 0.84),
+      {xref: "paper", yref: "paper", x: 0.98, y: 0.7, xanchor: "right", showarrow: false, bgcolor: "white",
+       text: `Desv. estándar: ${sd.toFixed(2)} MPa`}],
+    margin: {t: 50}
+  }, cfg);
+
+  // Cemento vs resistencia
+  const [m, c0] = ols(cem, r), x0 = Math.min(...cem), x1 = Math.max(...cem);
+  react("g-cem", [
+    {x: cem, y: r, mode: "markers", type: "scatter", name: "Mezclas", marker: {color: "#4c78a8"}},
+    {x: [x0, x1], y: [m * x0 + c0, m * x1 + c0], mode: "lines", name: "Tendencia (OLS)", line: {color: "red"}}],
+    {title: "Cemento vs. resistencia", xaxis: {title: "Cemento (kg/m3)"}, yaxis: {title: "Resistencia (MPa)"},
+     showlegend: false, margin: {t: 50}}, cfg);
+
+  // Slump vs flow
+  const sl = col(d, "SLUMP(cm)"), fl = col(d, "FLOW(cm)"), [m2, c2] = ols(sl, fl);
+  const s0 = Math.min(...sl), s1 = Math.max(...sl);
+  react("g-sf", [
+    {x: sl, y: fl, mode: "markers", type: "scatter",
+     marker: {color: r, colorscale: "Viridis", showscale: true, colorbar: {title: "MPa"}}},
+    {x: [s0, s1], y: [m2 * s0 + c2, m2 * s1 + c2], mode: "lines", line: {color: "red"}}],
+    {title: "Slump vs. flow", xaxis: {title: "Slump (cm)"}, yaxis: {title: "Flow (cm)"}, showlegend: false, margin: {t: 50}}, cfg);
+
+  // Correlación
+  const z = COLS.map(a => COLS.map(b => (v => v === null ? null : +v.toFixed(2))(pearson(col(d, a), col(d, b)))));
+  const lab = COLS.map(c => NOMBRES[c] || c);
+  react("g-corr", [{z, x: lab, y: lab, type: "heatmap", colorscale: "RdBu", reversescale: true, zmin: -1, zmax: 1,
+    texttemplate: "%{z:.2f}"}],
+    {title: "Matriz de correlación", xaxis: {tickangle: -45}, yaxis: {autorange: "reversed"}, margin: {t: 50, b: 110, l: 110}}, cfg);
+
+  // 3D
+  react("g-3d", [{x: cem, y: agua, z: r, mode: "markers", type: "scatter3d",
+    marker: {size: 4, color: r, colorscale: "Viridis", colorbar: {title: "MPa"}}}],
+    {title: "Cemento, agua y resistencia",
+     scene: {xaxis: {title: "Cement"}, yaxis: {title: "Water"}, zaxis: {title: "Resistencia"}}, margin: {t: 50}}, cfg);
+
+  // Real vs predicha (diagonal con el rango completo de los datos)
+  const gmin = Math.min(...ys), gmax = Math.max(...ys);
+  react("g-real", [
+    {x: r, y: col(d, "pred"), mode: "markers", type: "scatter", marker: {color: "#4c78a8"}},
+    {x: [gmin, gmax], y: [gmin, gmax], mode: "lines", line: {color: "red", dash: "dash"}}],
+    {title: `Resistencia real vs. predicha (${D.mejor}, validación cruzada)`,
+     xaxis: {title: "Real (MPa)"}, yaxis: {title: "Predicha (MPa)"}, showlegend: false, margin: {t: 50}}, cfg);
+}
+let pendiente = false;
+function programar() {
+  if (pendiente) return;
+  pendiente = true;
+  requestAnimationFrame(() => { pendiente = false; try { actualizar(); } catch (e) { console.error(e); } });
+}
+$lo.addEventListener("input", programar);
+$hi.addEventListener("input", programar);
+
+// Tabla de modelos
+document.getElementById("tabla").innerHTML =
+  "<tr><th>Modelo</th><th>R2</th><th>MAE (MPa)</th><th>RMSE (MPa)</th></tr>" +
+  D.tabla.map(t => `<tr><td>${t.modelo}</td><td>${t.r2.toFixed(3)}</td><td>${t.mae.toFixed(3)}</td><td>${t.rmse.toFixed(3)}</td></tr>`).join("");
+
+// Simulador
+const form = document.getElementById("form");
+FEATS.forEach((f, i) => {
+  const [mn, mx, mu] = D.lin.rango[f];
+  form.insertAdjacentHTML("beforeend",
+    `<label>${f}<input type="number" id="in-${i}" value="${mu.toFixed(1)}" min="${mn}" max="${mx}" step="any"></label>`);
+});
+function predecir() {
+  let p = D.lin.intercepto;
+  for (let i = 0; i < FEATS.length; i++) {
+    const v = parseFloat(document.getElementById("in-" + i).value);
+    if (isNaN(v)) { document.getElementById("pred").textContent = "Completa todos los campos"; return; }
+    p += D.lin.coef[FEATS[i]] * v;
+  }
+  document.getElementById("pred").textContent = p.toFixed(2) + " MPa";
+}
+form.addEventListener("input", predecir);
+
+actualizar(); predecir();
+</script></body></html>
